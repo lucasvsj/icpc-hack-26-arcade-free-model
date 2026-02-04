@@ -8,14 +8,7 @@ En Buk, sponsor oficial de la [Hackathon ICPC](https://icpc.global/regionals/fin
 
 ## 🏆 Premios
 
-**🥇 Primer Lugar:**
-- 💵 **$250 USD en cash**
-- 🎟️ **Un cupo asegurado para participar en la Hackathon ICPC**
-- 🎮 **Tu juego disponible en la máquina arcade**
-
-**🥈 Segundo Lugar:**
-- 💵 **$100 USD en cash**
-- 🎮 **Tu juego disponible en la máquina arcade**
+TBA
 
 ---
 
