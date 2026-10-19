@@ -1,5 +1,6 @@
 {
   "game_id": "orbit-rush",
   "game_name": "Orbit Rush",
-  "description": "Arcade orbital de un solo toque: cambia de órbita para esquivar spikes, recoge gems, encadena combos y sobrevive a un espiral neón que acelera sin parar. ¿Cuánto aguantas?"
+  "description": "Arcade orbital de un solo toque: cambia de órbita para esquivar spikes, recoge gems, encadena combos y sobrevive a un espiral neón que acelera sin parar. ¿Cuánto aguantas?",
+  "platform": "mobile"
 }
