@@ -1,6 +1,6 @@
 // ORBIT RUSH - one-tap orbital arcade game (Phaser 3)
 // Tap / click / space / enter / up / W to switch orbit (arcade P1A + START1 also work)
-// Dodge spikes, collect gems, build combos, grab shields, survive.
+// Dodge spikes, evade blue electric arcs and blinkers, collect gems, grab shields, survive.
 // M toggles sound. Best score is saved locally.
 
 const D2R = Math.PI / 180;
@@ -19,7 +19,9 @@ const COL = {
   white: 0xffffff,
   gray: 0x8394b8,
   orange: 0xff9e3b,
-  green: 0x4dffa6
+  green: 0x4dffa6,
+  electric: 0x4da6ff,
+  violet: 0xb45dff
 };
 
 // 5x8 pixel font, column major (bit 0 = top row)
@@ -105,6 +107,8 @@ let player = { angle: 0, travel: 0, ring: 1, r: 150, dir: 1, shield: false, inv:
 let spikes = [];
 let gems = [];
 let shields = [];
+let electrics = [];
+let blinkers = [];
 let parts = [];
 let pops = [];
 let waves = [];
@@ -248,6 +252,8 @@ function startRun() {
   spikes = [];
   gems = [];
   shields = [];
+  electrics = [];
+  blinkers = [];
   parts = [];
   pops = [];
   waves = [];
@@ -317,6 +323,29 @@ function addShield(a, ring) {
   shields.push({ a: a, ring: ring, ph: Math.random() * 6.283 });
 }
 
+// Electric pair: two blue diamonds on the same ring that electrify the arc between them
+function addElectric(a, ring, span, dir) {
+  electrics.push({
+    a1: a,
+    a2: a + dir * span,
+    ring: ring,
+    span: span,
+    dir: dir,
+    ph: Math.random() * 6.283
+  });
+}
+
+// Blinker: diamond that periodically hops between the two rings
+function addBlinker(a, ring) {
+  blinkers.push({
+    a: a,
+    ring: ring,
+    ph: Math.random() * 6.283,
+    t: 900 + Math.random() * 600,
+    warn: 0
+  });
+}
+
 function spawnPattern(at) {
   const dirf = player.dir;
   const off = Math.max(1, omegaDeg() / 200);
@@ -357,6 +386,21 @@ function spawnPattern(at) {
       return 56 * off;
     } });
   }
+  // Electric pair: both diamonds always share the same ring
+  if (level >= 2) {
+    pool.push({ w: 2, f: function () {
+      const r = rndRing();
+      const span = Math.max(30, 50 - (level - 2) * 4);
+      addElectric(at, r, span, player.dir);
+      return span + 18;
+    } });
+  }
+
+  // Blinker: appears from level 3 onward
+  if (level >= 3) {
+    pool.push({ w: 1, f: function () { addBlinker(at, rndRing()); return 0; } });
+  }
+
   if (level >= 2 && !player.shield && Math.random() < 0.12) {
     pool.push({ w: 1, f: function () { addShield(at, rndRing()); return 0; } });
   }
@@ -388,7 +432,7 @@ function playerPos() {
   return entPos(player.angle, player.r);
 }
 
-function updateEntities() {
+function updateEntities(delta) {
   for (let i = spikes.length - 1; i >= 0; i--) {
     const s = spikes[i];
     const eff = s.a + (s.wob ? Math.sin(now * 0.0016 + s.ph) * 10 : 0);
@@ -428,6 +472,44 @@ function updateEntities() {
       continue;
     }
     if (rel * player.dir < -12) shields.splice(i, 1);
+  }
+
+  // Electric pair: the whole arc between the two diamonds is lethal
+  for (let i = electrics.length - 1; i >= 0; i--) {
+    const e = electrics[i];
+    const rr = R[e.ring];
+    const along = e.dir * wrapSigned(player.angle - e.a1);
+    if (along >= 0 && along <= e.span && Math.abs(player.r - rr) < 20) {
+      hitElectric(e, i);
+      return;
+    }
+    // Clear once the far diamond is well past the player, or if the player
+    // reversed and left the whole pair more than 150 degrees away.
+    const along2 = e.dir * wrapSigned(player.angle - e.a2);
+    const farA1 = Math.abs(wrapSigned(player.angle - e.a1));
+    const farA2 = Math.abs(wrapSigned(player.angle - e.a2));
+    if (along2 > 14 || (farA1 > 150 && farA2 > 150)) electrics.splice(i, 1);
+  }
+
+  // Blinker: ring changes over time, telegraphed by a warning flash
+  for (let i = blinkers.length - 1; i >= 0; i--) {
+    const b = blinkers[i];
+    if (b.warn > 0) b.warn -= delta;
+    b.t -= delta;
+    if (b.t <= 0) {
+      b.ring = 1 - b.ring;
+      b.t = 1100 + Math.random() * 500;
+      b.warn = 260;
+      const gp = entPos(b.a, R[b.ring]);
+      spark(gp.x, gp.y, COL.violet, 6, 60);
+    }
+    const rel = wrapSigned(b.a - player.angle);
+    const rr = R[b.ring];
+    if (Math.abs(rel) < 9 && Math.abs(player.r - rr) < 20) {
+      hitBlinker(b, i);
+      return;
+    }
+    if (rel * player.dir < -12) blinkers.splice(i, 1);
   }
 }
 
@@ -486,6 +568,36 @@ function hitSpike(s) {
     vibrate(35);
     const idx = spikes.indexOf(s);
     if (idx >= 0) spikes.splice(idx, 1);
+    return;
+  }
+  die();
+}
+
+function breakShield(p, color) {
+  player.shield = false;
+  player.inv = 1.2;
+  waves.push({ x: p.x, y: p.y, r: 8, max: 90, life: 0.5, maxLife: 0.5, color: color });
+  spark(p.x, p.y, color, 18, 140);
+  tone(320, 0.22, 'square', 0.07, 900);
+  scene.cameras.main.shake(150, 0.006);
+  vibrate(35);
+}
+
+function hitElectric(e, i) {
+  if (player.inv > 0) return;
+  if (player.shield) {
+    breakShield(playerPos(), COL.electric);
+    if (i >= 0) electrics.splice(i, 1);
+    return;
+  }
+  die();
+}
+
+function hitBlinker(b, i) {
+  if (player.inv > 0) return;
+  if (player.shield) {
+    breakShield(playerPos(), COL.violet);
+    if (i >= 0) blinkers.splice(i, 1);
     return;
   }
   die();
@@ -621,7 +733,7 @@ function playUpdate(dt, delta) {
   trail.push(playerPos());
   if (trail.length > 16) trail.shift();
 
-  updateEntities();
+  updateEntities(delta);
 }
 
 // ---------- fx ----------
@@ -775,6 +887,68 @@ function drawSpike(s) {
   drawDiamond(p.x, p.y, h * 0.32);
 }
 
+function drawElectricDiamond(p, size, col) {
+  gfx.fillStyle(col, 0.14);
+  drawDiamond(p.x, p.y, size * 1.75);
+  gfx.fillStyle(col, 0.95);
+  drawDiamond(p.x, p.y, size);
+  gfx.fillStyle(0xffffff, 0.9);
+  drawDiamond(p.x, p.y, size * 0.3);
+}
+
+function drawElectricPair(e) {
+  const S = Math.max(0.7, Math.min(1.6, R[1] / 150));
+  const rr = R[e.ring];
+  const segs = Math.max(8, Math.floor(e.span / 3));
+  const stepA = e.dir * e.span / segs;
+  const flick = Math.sin(now * 0.02 + e.ph) * 3;
+  const pts = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = e.a1 + stepA * i;
+    const j = (i === 0 || i === segs) ? 0 : (Math.random() - 0.5) * 9 * S;
+    pts.push(entPos(a, rr + j + flick));
+  }
+
+  gfx.lineStyle(7, COL.electric, 0.10);
+  gfx.beginPath();
+  gfx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) gfx.lineTo(pts[i].x, pts[i].y);
+  gfx.strokePath();
+
+  gfx.lineStyle(2, COL.electric, 0.95);
+  gfx.beginPath();
+  gfx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) gfx.lineTo(pts[i].x, pts[i].y);
+  gfx.strokePath();
+
+  gfx.lineStyle(1, 0xdff4ff, 0.85);
+  for (let i = 1; i < pts.length - 1; i++) {
+    if (Math.random() < 0.35) {
+      const p = pts[i];
+      gfx.lineBetween(p.x, p.y, p.x + (Math.random() - 0.5) * 7, p.y + (Math.random() - 0.5) * 7);
+    }
+  }
+
+  drawElectricDiamond(entPos(e.a1, rr), 11 * S, COL.electric);
+  drawElectricDiamond(entPos(e.a2, rr), 11 * S, COL.electric);
+}
+
+function drawBlinker(b) {
+  const S = Math.max(0.7, Math.min(1.6, R[1] / 150));
+  const col = b.warn > 0 ? COL.gold : COL.violet;
+  const p = entPos(b.a, R[b.ring]);
+  const ghost = entPos(b.a, R[1 - b.ring]);
+  gfx.fillStyle(col, b.warn > 0 ? 0.22 : 0.08);
+  drawDiamond(ghost.x, ghost.y, 9 * S);
+  const pa = b.warn > 0 ? 0.55 + 0.45 * Math.sin(now * 0.03) : 0.95;
+  gfx.fillStyle(col, 0.14);
+  drawDiamond(p.x, p.y, 14 * S);
+  gfx.fillStyle(col, pa);
+  drawDiamond(p.x, p.y, 9 * S);
+  gfx.fillStyle(0xffffff, 0.9);
+  drawDiamond(p.x, p.y, 2.8 * S);
+}
+
 function drawGemAt(x, y, ph, scale) {
   const S = scale || 1;
   const rr = 6.4 * S;
@@ -866,6 +1040,8 @@ function drawWorld() {
   }
 
   for (let i = 0; i < spikes.length; i++) drawSpike(spikes[i]);
+  for (let i = 0; i < electrics.length; i++) drawElectricPair(electrics[i]);
+  for (let i = 0; i < blinkers.length; i++) drawBlinker(blinkers[i]);
   for (let i = 0; i < gems.length; i++) drawGem(gems[i]);
   for (let i = 0; i < shields.length; i++) drawShield(shields[i]);
   drawPlayer();
