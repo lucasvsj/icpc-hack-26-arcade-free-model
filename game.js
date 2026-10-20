@@ -143,6 +143,7 @@ let uiBtns = [];
 let lbScores = null;
 let lbError = false;
 let lbTimer = 0;
+let howtoPage = 0;
 
 // ---------- setup ----------
 function create() {
@@ -220,9 +221,32 @@ function create() {
       }
       return;
     }
-    if (state === 'leaderboard' || state === 'howto') {
+    if (state === 'leaderboard') {
       if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'Enter' || e.key === ' ' || e.key === 'P1B') {
         backToMenu();
+        return;
+      }
+      return;
+    }
+    if (state === 'howto') {
+      if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'P1B') {
+        backToMenu();
+        return;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        howtoPage = 0;
+        tone(640, 0.04, 'square', 0.03);
+        return;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        howtoPage = 1;
+        tone(640, 0.04, 'square', 0.03);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'P1A' || e.key === 'START1') {
+        if (howtoPage < 1) howtoPage = 1;
+        else backToMenu();
+        tone(640, 0.04, 'square', 0.03);
         return;
       }
       return;
@@ -322,6 +346,7 @@ function openHowTo() {
   stateT = 0;
   uiBtns = [];
   menuBtns = [];
+  howtoPage = 0;
   tone(700, 0.04, 'square', 0.03);
 }
 
@@ -1398,33 +1423,241 @@ function drawLeaderboard() {
   drawMuteButton();
 }
 
-function drawHowTo() {
-  const ts = Math.max(2.8, Math.min(W / 72, H / 92, 5));
-  text('HOW TO PLAY', CX, Math.max(16, H * 0.06), ts, COL.cyan, 1);
+function fitText(t, maxW, maxSize, minSize) {
+  const w = t.length * 6 - 1;
+  const s = maxW / (w > 0 ? w : 1);
+  return Math.max(minSize, Math.min(maxSize, s));
+}
 
-  const lines = [
-    'TAP SWITCHES ORBIT',
-    'OR PRESS SPACE OR UP',
-    'DODGE SPIKES AND BLUE ARCS',
-    'COLLECT GEMS FOR COMBOS',
-    'GRAB SHIELDS TO SURVIVE',
-    'WATCH OUT FOR BLINKERS'
+function textLeft(t, x, y, size, color, alpha) {
+  const w = (t.length * 6 - 1) * size;
+  text(t, x + w / 2, y, size, color, alpha);
+}
+
+function iconSwitchOrbit(cx, cy, s) {
+  gfx.lineStyle(2, COL.blue, 0.55);
+  gfx.strokeCircle(cx, cy, s * 0.34);
+  gfx.strokeCircle(cx, cy, s * 0.62);
+
+  const a = -50 * D2R;
+  const x1 = cx + Math.cos(a) * s * 0.62;
+  const y1 = cy + Math.sin(a) * s * 0.62;
+  const x2 = cx + Math.cos(a) * s * 0.34;
+  const y2 = cy + Math.sin(a) * s * 0.34;
+
+  gfx.lineStyle(2, COL.cyan, 0.75);
+  gfx.lineBetween(x1, y1, x2, y2);
+
+  gfx.fillStyle(COL.cyan, 0.2);
+  gfx.fillCircle(x1, y1, s * 0.13);
+  gfx.fillStyle(0xffffff, 1);
+  gfx.fillCircle(x1, y1, s * 0.06);
+
+  gfx.fillStyle(COL.cyan, 0.4);
+  gfx.fillCircle(x2, y2, s * 0.06);
+}
+
+function iconSpike(cx, cy, s) {
+  gfx.lineStyle(2, COL.blue, 0.45);
+  gfx.strokeCircle(cx, cy, s * 0.6);
+  const a = -35 * D2R;
+  const px = cx + Math.cos(a) * s * 0.6;
+  const py = cy + Math.sin(a) * s * 0.6;
+  gfx.fillStyle(COL.magenta, 0.16);
+  drawDiamond(px, py, s * 0.2);
+  gfx.fillStyle(COL.magenta, 0.95);
+  drawDiamond(px, py, s * 0.11);
+  gfx.fillStyle(0xffffff, 0.9);
+  drawDiamond(px, py, s * 0.04);
+}
+
+function iconArc(cx, cy, s) {
+  gfx.lineStyle(2, COL.blue, 0.45);
+  gfx.strokeCircle(cx, cy, s * 0.6);
+
+  const r = s * 0.6;
+  const a1 = -34 * D2R;
+  const a2 = 34 * D2R;
+  const p1x = cx + Math.cos(a1) * r;
+  const p1y = cy + Math.sin(a1) * r;
+  const p2x = cx + Math.cos(a2) * r;
+  const p2y = cy + Math.sin(a2) * r;
+  const segs = 6;
+
+  gfx.lineStyle(3, COL.electric, 0.2);
+  gfx.beginPath();
+  gfx.moveTo(p1x, p1y);
+  for (let i = 1; i <= segs; i++) {
+    const t = i / segs;
+    const j = i < segs ? (Math.random() - 0.5) * 10 : 0;
+    gfx.lineTo(cx + Math.cos(a1 + (a2 - a1) * t) * (r + j),
+               cy + Math.sin(a1 + (a2 - a1) * t) * (r + j));
+  }
+  gfx.strokePath();
+
+  gfx.lineStyle(1.8, COL.electric, 0.95);
+  gfx.beginPath();
+  gfx.moveTo(p1x, p1y);
+  for (let i = 1; i <= segs; i++) {
+    const t = i / segs;
+    const j = i < segs ? (Math.random() - 0.5) * 7 : 0;
+    gfx.lineTo(cx + Math.cos(a1 + (a2 - a1) * t) * (r + j),
+               cy + Math.sin(a1 + (a2 - a1) * t) * (r + j));
+  }
+  gfx.strokePath();
+
+  gfx.fillStyle(COL.electric, 0.16);
+  drawDiamond(p1x, p1y, s * 0.19);
+  drawDiamond(p2x, p2y, s * 0.19);
+  gfx.fillStyle(COL.electric, 0.98);
+  drawDiamond(p1x, p1y, s * 0.1);
+  drawDiamond(p2x, p2y, s * 0.1);
+  gfx.fillStyle(0xffffff, 0.9);
+  drawDiamond(p1x, p1y, s * 0.035);
+  drawDiamond(p2x, p2y, s * 0.035);
+}
+
+function iconBlinker(cx, cy, s) {
+  gfx.lineStyle(2, COL.blue, 0.45);
+  gfx.strokeCircle(cx, cy, s * 0.62);
+  gfx.strokeCircle(cx, cy, s * 0.34);
+
+  const px = cx + s * 0.62;
+  const py = cy;
+  const qx = cx + s * 0.34;
+  const qy = cy;
+
+  gfx.lineStyle(1.5, COL.gold, 0.55 + 0.45 * Math.sin(now * 0.01));
+  gfx.strokeCircle(px, py, s * 0.17);
+
+  gfx.fillStyle(COL.violet, 0.32);
+  drawDiamond(qx, qy, s * 0.1);
+  gfx.fillStyle(COL.violet, 0.98);
+  drawDiamond(px, py, s * 0.11);
+  gfx.fillStyle(0xffffff, 0.9);
+  drawDiamond(px, py, s * 0.035);
+
+  gfx.lineStyle(1.5, COL.gray, 0.55);
+  gfx.lineBetween(px - s * 0.06, py, qx + s * 0.06, qy);
+}
+
+function iconGem(cx, cy, s) {
+  const rr = s * 0.15;
+  gfx.fillStyle(COL.gold, 0.12);
+  gfx.fillCircle(cx, cy, rr * 2.2);
+  gfx.fillStyle(COL.gold, 0.25);
+  gfx.fillCircle(cx, cy, rr * 1.5);
+  gfx.fillStyle(COL.gold, 0.98);
+  gfx.fillCircle(cx, cy, rr);
+  gfx.fillStyle(0xffffff, 0.9);
+  gfx.fillCircle(cx - rr * 0.25, cy - rr * 0.28, rr * 0.28);
+}
+
+function iconShield(cx, cy, s) {
+  const rr = s * 0.2;
+  gfx.fillStyle(COL.cyan, 0.12);
+  gfx.fillCircle(cx, cy, rr * 2.1);
+  for (let k = 0; k < 6; k++) {
+    const a1 = k * 1.047 - 0.3;
+    const a2 = (k + 1) * 1.047 - 0.3;
+    const x1 = cx + Math.cos(a1) * rr;
+    const y1 = cy + Math.sin(a1) * rr;
+    const x2 = cx + Math.cos(a2) * rr;
+    const y2 = cy + Math.sin(a2) * rr;
+    gfx.fillStyle(COL.cyan, 0.3);
+    gfx.fillTriangle(cx, cy, x1, y1, x2, y2);
+    gfx.lineStyle(2, COL.cyan, 0.9);
+    gfx.lineBetween(x1, y1, x2, y2);
+  }
+  gfx.fillStyle(0xffffff, 0.95);
+  gfx.fillCircle(cx, cy, rr * 0.22);
+}
+
+function infoCard(x, y, w, h, accent, iconFn, title, l1, l2) {
+  gfx.fillStyle(0x0a0d22, 0.9);
+  gfx.fillRoundedRect(x, y, w, h, 14);
+  gfx.lineStyle(1.5, accent, 0.45);
+  gfx.strokeRoundedRect(x, y, w, h, 14);
+
+  const iconSize = Math.min(h * 0.62, 84, w * 0.28);
+  iconFn(x + 14 + iconSize * 0.5, y + h / 2, iconSize);
+
+  const tx = x + 14 + iconSize + 14;
+  const tw = x + w - 14 - tx;
+  const ts = fitText(title, tw, 2.1, 1.1);
+  const bs = fitText(l1.length > l2.length ? l1 : l2, tw, 1.5, 0.9);
+
+  const totalH = 8 * ts + 10 + 8 * bs + 6 + 8 * bs;
+  let ty = y + (h - totalH) / 2;
+
+  textLeft(title, tx, ty, ts, accent, 1);
+  ty += 8 * ts + 10;
+  textLeft(l1, tx, ty, bs, 0xdfe8ff, 0.96);
+  ty += 8 * bs + 6;
+  textLeft(l2, tx, ty, bs, 0xdfe8ff, 0.96);
+}
+
+function drawHowTo() {
+  const ts = Math.max(3, Math.min(W / 95, H / 110, 4.6));
+  const titleY = Math.max(12, H * 0.035);
+  text('HOW TO PLAY', CX, titleY, ts, COL.cyan, 1);
+
+  const ctrlH = Math.max(38, Math.min(46, H * 0.055));
+  const ctrlY = H - ctrlH - 14;
+  const ctrlW = Math.max(56, Math.min(70, W * 0.18));
+
+  const gap = Math.max(8, H * 0.015);
+  const top = titleY + 8 * ts + 14;
+  const bottom = ctrlY - 14;
+  const areaH = bottom - top;
+  const cardH = Math.max(60, (areaH - gap * 2) / 3);
+  const cardW = Math.min(W * 0.94, 400);
+  const cardX = CX - cardW / 2;
+
+  const pages = [
+    [
+      [COL.cyan, iconSwitchOrbit, 'SWITCH ORBIT', 'TAP SPACE OR UP', 'TO SWITCH ORBIT'],
+      [COL.magenta, iconSpike, 'MAGENTA SPIKES', 'ONE HIT AND YOU LOSE', 'CHANGE RING TO DODGE'],
+      [COL.electric, iconArc, 'BLUE ARC', 'TWO BLUE DIAMONDS', 'THE ARC BETWEEN SHOCKS']
+    ],
+    [
+      [COL.violet, iconBlinker, 'VIOLET BLINKER', 'JUMPS BETWEEN RINGS', 'GOLD FLASH MEANS JUMP'],
+      [COL.gold, iconGem, 'GOLD GEMS', 'COLLECT TO BUILD COMBO', 'HIGHER COMBO MORE POINTS'],
+      [COL.cyan, iconShield, 'CYAN SHIELD', 'ABSORBS ONE HIT', 'GRAB IT WHEN YOU CAN']
+    ]
   ];
-  const size = Math.max(1.2, Math.min(W / 330, 1.9));
-  let y = Math.max(84, H * 0.24);
-  for (let i = 0; i < lines.length; i++) {
-    text(lines[i], CX, y, size, COL.gray, 0.9);
-    y += 8 * size + 12;
+
+  const list = pages[howtoPage] || pages[0];
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    infoCard(cardX, top + i * (cardH + gap), cardW, cardH, c[0], c[1], c[2], c[3], c[4]);
   }
 
-  const bw = Math.min(W * 0.5, 220);
-  const bh = Math.max(30, Math.min(46, H * 0.06));
-  const bx = CX - bw / 2;
-  const by = Math.min(H - bh - 22, y + 16);
-
   uiBtns = [];
-  uiButton(bx, by, bw, bh, 'BACK', Math.max(1.6, bh / 18), COL.gray, false);
-  uiBtns.push({ x: bx, y: by, w: bw, h: bh, fn: backToMenu });
+
+  const btnSize = Math.max(1.2, ctrlH / 24);
+  uiButton(10, ctrlY, ctrlW, ctrlH, 'BACK', btnSize, COL.gray, false);
+  uiBtns.push({ x: 10, y: ctrlY, w: ctrlW, h: ctrlH, fn: backToMenu });
+
+  const prevOn = howtoPage > 0;
+  const prevX = W - 10 - ctrlW * 2 - 8;
+  uiButton(prevX, ctrlY, ctrlW, ctrlH, 'PREV', btnSize, prevOn ? COL.cyan : 0x39405c, false);
+  if (prevOn) {
+    uiBtns.push({ x: prevX, y: ctrlY, w: ctrlW, h: ctrlH, fn: function () { howtoPage = 0; tone(640, 0.04, 'square', 0.03); } });
+  }
+
+  const nextOn = howtoPage < pages.length - 1;
+  const nextX = W - 10 - ctrlW;
+  uiButton(nextX, ctrlY, ctrlW, ctrlH, 'NEXT', btnSize, nextOn ? COL.cyan : 0x39405c, false);
+  if (nextOn) {
+    uiBtns.push({ x: nextX, y: ctrlY, w: ctrlW, h: ctrlH, fn: function () { howtoPage = 1; tone(640, 0.04, 'square', 0.03); } });
+  }
+
+  for (let i = 0; i < pages.length; i++) {
+    const dx = CX + (i - (pages.length - 1) / 2) * 18;
+    gfx.fillStyle(i === howtoPage ? COL.cyan : 0x39405c, 0.95);
+    gfx.fillCircle(dx, ctrlY + ctrlH / 2, i === howtoPage ? 4.5 : 3);
+  }
 
   drawMuteButton();
 }
