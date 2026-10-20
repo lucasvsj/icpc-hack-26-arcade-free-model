@@ -1293,14 +1293,23 @@ function drawMenu() {
   text('TAP OR ARROWS + ENTER', CX, infoY + 22, 1.1, COL.gray, 0.5);
 
   const bw = Math.min(W * 0.74, 320);
-  const bh = Math.max(30, Math.min(46, H * 0.058));
-  const smallH = Math.max(24, bh * 0.72);
-  const gap = Math.max(6, bh * 0.18);
   const bx = CX - bw / 2;
-  const total = bh + gap + smallH + gap + smallH;
-  let by = H - total - Math.max(14, H * 0.025);
+  let bh = Math.max(30, Math.min(46, H * 0.058));
+  let smallH = Math.max(24, bh * 0.72);
+  let gap = Math.max(6, bh * 0.18);
+  let total = bh + gap + smallH + gap + smallH;
   const minY = CY + R[1] + 14;
+  const avail = Math.max(60, H - minY - 10);
+  if (total > avail) {
+    const k = avail / total;
+    bh *= k;
+    smallH *= k;
+    gap *= k;
+    total = bh + gap + smallH + gap + smallH;
+  }
+  let by = H - total - Math.max(10, H * 0.02);
   if (by < minY) by = minY;
+  if (by + total > H - 4) by = Math.max(4, H - total - 4);
 
   menuBtns = [];
 
