@@ -137,6 +137,12 @@ let muted = false;
 let beatTimer = null;
 let beatStep = 0;
 let mutedBtn = { x: 0, y: 0, w: 36, h: 36 };
+let menuSel = 0;
+let menuBtns = [];
+let uiBtns = [];
+let lbScores = null;
+let lbError = false;
+let lbTimer = 0;
 
 // ---------- setup ----------
 function create() {
@@ -159,6 +165,24 @@ function create() {
       toggleMute();
       return;
     }
+    if (state === 'menu') {
+      for (let i = 0; i < menuBtns.length; i++) {
+        const b = menuBtns[i];
+        if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) {
+          menuSel = b.idx;
+          menuAction(b.idx);
+          return;
+        }
+      }
+      return;
+    }
+    if (state === 'options' || state === 'leaderboard' || state === 'howto') {
+      hitUI(p.x, p.y);
+      return;
+    }
+    if (state === 'gameover') {
+      if (hitUI(p.x, p.y)) return;
+    }
     press();
   });
 
@@ -168,7 +192,54 @@ function create() {
       toggleMute();
       return;
     }
+    if (state === 'menu') {
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S' || e.key === 'ArrowRight') {
+        menuSel = (menuSel + 1) % 4;
+        tone(640, 0.03, 'square', 0.03);
+        return;
+      }
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === 'ArrowLeft') {
+        menuSel = (menuSel + 3) % 4;
+        tone(640, 0.03, 'square', 0.03);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'P1A' || e.key === 'P1B' || e.key === 'START1') {
+        menuAction(menuSel);
+        return;
+      }
+      return;
+    }
+    if (state === 'options') {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'P1A' || e.key === 'START1') {
+        toggleMute();
+        return;
+      }
+      if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'P1B') {
+        backToMenu();
+        return;
+      }
+      return;
+    }
+    if (state === 'leaderboard' || state === 'howto') {
+      if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'Enter' || e.key === ' ' || e.key === 'P1B') {
+        backToMenu();
+        return;
+      }
+      return;
+    }
+    if (state === 'gameover' && (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'P1B')) {
+      backToMenu();
+      return;
+    }
     if (ACTION_KEYS[e.key]) press();
+  });
+
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.type === 'arcade:leaderboard:data') {
+      lbScores = Array.isArray(e.data.scores) ? e.data.scores : [];
+      lbError = !!e.data.error;
+      lbTimer = 0;
+    }
   });
 
   player.r = R[1];
@@ -208,12 +279,70 @@ function makeStars() {
 function press() {
   resumeAudio();
   if (state === 'menu') {
-    startRun();
+    menuAction(menuSel);
   } else if (state === 'playing') {
     trySwitch();
   } else if (state === 'gameover') {
     if (stateT > 550) startRun();
   }
+}
+
+function menuAction(i) {
+  resumeAudio();
+  if (i === 0) startRun();
+  else if (i === 1) openLeaderboard();
+  else if (i === 2) openOptions();
+  else openHowTo();
+}
+
+function backToMenu() {
+  state = 'menu';
+  stateT = 0;
+  menuSel = 0;
+  menuBtns = [];
+  uiBtns = [];
+  lbScores = null;
+  lbError = false;
+  lbTimer = 0;
+  trail = [];
+  stopMusic();
+  tone(420, 0.05, 'square', 0.04);
+}
+
+function openOptions() {
+  state = 'options';
+  stateT = 0;
+  uiBtns = [];
+  menuBtns = [];
+  tone(700, 0.04, 'square', 0.03);
+}
+
+function openHowTo() {
+  state = 'howto';
+  stateT = 0;
+  uiBtns = [];
+  menuBtns = [];
+  tone(700, 0.04, 'square', 0.03);
+}
+
+function openLeaderboard() {
+  state = 'leaderboard';
+  stateT = 0;
+  uiBtns = [];
+  menuBtns = [];
+  lbScores = null;
+  lbError = false;
+  lbTimer = 2500;
+  if (window.parent && window.parent !== window) {
+    try {
+      window.parent.postMessage({ type: 'arcade:leaderboard:request' }, '*');
+    } catch (e) {}
+  } else {
+    lbScores = [];
+    lbError = true;
+    lbTimer = 0;
+  }
+  tone(700, 0.04, 'square', 0.03);
 }
 
 function trySwitch() {
@@ -665,6 +794,22 @@ function update(time, delta) {
   } else if (state === 'gameover') {
     drawWorld();
     drawGameOver();
+  } else if (state === 'options') {
+    drawWorld();
+    drawOptions();
+  } else if (state === 'leaderboard') {
+    if (lbScores === null && lbTimer > 0) {
+      lbTimer -= delta;
+      if (lbTimer <= 0) {
+        lbScores = [];
+        lbError = true;
+      }
+    }
+    drawWorld();
+    drawLeaderboard();
+  } else if (state === 'howto') {
+    drawWorld();
+    drawHowTo();
   }
 
   drawFx(dt);
@@ -1103,23 +1248,174 @@ function drawHUD() {
   }
 }
 
+function uiButton(x, y, w, h, label, size, color, selected) {
+  const r = Math.min(12, h * 0.35);
+  gfx.fillStyle(color, selected ? 0.2 : 0.07);
+  gfx.fillRoundedRect(x, y, w, h, r);
+  gfx.lineStyle(selected ? 2.5 : 1.5, color, selected ? 0.95 : 0.42);
+  gfx.strokeRoundedRect(x, y, w, h, r);
+  if (selected) {
+    gfx.lineStyle(1, 0xffffff, 0.16);
+    gfx.strokeRoundedRect(x + 3, y + 3, w - 6, h - 6, Math.max(1, r - 3));
+  }
+  text(label, x + w / 2, y + (h - 8 * size) / 2, size, color, selected ? 1 : 0.82);
+}
+
+function hitUI(x, y) {
+  for (let i = 0; i < uiBtns.length; i++) {
+    const b = uiBtns[i];
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+      b.fn();
+      return true;
+    }
+  }
+  return false;
+}
+
+function normName(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/_/g, ' ')
+    .replace(/[^A-Z0-9 .:+\-'\/]/g, ' ')
+    .slice(0, 12);
+}
+
 function drawMenu() {
   const ts = Math.max(4, Math.min(W / 24, H / 76, 10));
-  const titleY = Math.max(16, H * 0.045);
+  const titleY = Math.max(12, H * 0.035);
   text('ORBIT', CX, titleY, ts, COL.cyan, 1);
   text('RUSH', CX, titleY + 9 * ts, ts, COL.magenta, 1);
 
-  const promptY = CY + R[1] + 44;
-  const pa = 0.55 + 0.45 * Math.sin(now * 0.006);
-  text('TAP TO START', CX, promptY, Math.max(2.2, Math.min(3.4, W / 120)), COL.white, pa);
+  const infoY = titleY + 18 * ts + 10;
+  text('BEST ' + best, CX, infoY, 1.8, COL.gold, 0.9);
+  text('TAP OR ARROWS + ENTER', CX, infoY + 22, 1.1, COL.gray, 0.5);
 
-  const h1 = promptY + 42;
-  text('TAP SWITCHES ORBIT', CX, h1, 1.6, COL.gray, 0.9);
-  const h2 = h1 + 23;
-  text('DODGE SPIKES - COLLECT GEMS', CX, h2, 1.6, COL.gray, 0.9);
-  const h3 = h2 + 22;
-  if (h3 < H - 64) text('SPACE OR CLICK WORKS TOO', CX, h3, 1.3, COL.gray, 0.55);
-  text('BEST ' + best, CX, Math.min(H - 26, h2 + 46), 2, COL.gold, 0.9);
+  const bw = Math.min(W * 0.74, 320);
+  const bh = Math.max(30, Math.min(46, H * 0.058));
+  const smallH = Math.max(24, bh * 0.72);
+  const gap = Math.max(6, bh * 0.18);
+  const bx = CX - bw / 2;
+  const total = bh + gap + smallH + gap + smallH;
+  let by = H - total - Math.max(14, H * 0.025);
+  const minY = CY + R[1] + 14;
+  if (by < minY) by = minY;
+
+  menuBtns = [];
+
+  uiButton(bx, by, bw, bh, 'PLAY', Math.max(2.2, bh / 16), COL.cyan, menuSel === 0);
+  menuBtns.push({ x: bx, y: by, w: bw, h: bh, idx: 0 });
+  by += bh + gap;
+
+  const half = (bw - gap) / 2;
+  uiButton(bx, by, half, smallH, 'LEADERBOARDS', Math.max(1.35, smallH / 22), COL.gold, menuSel === 1);
+  menuBtns.push({ x: bx, y: by, w: half, h: smallH, idx: 1 });
+  uiButton(bx + half + gap, by, half, smallH, 'OPTIONS', Math.max(1.5, smallH / 18), COL.cyan, menuSel === 2);
+  menuBtns.push({ x: bx + half + gap, y: by, w: half, h: smallH, idx: 2 });
+  by += smallH + gap;
+
+  uiButton(bx, by, bw, smallH, 'HOW TO PLAY', Math.max(1.5, smallH / 18), COL.gray, menuSel === 3);
+  menuBtns.push({ x: bx, y: by, w: bw, h: smallH, idx: 3 });
+
+  drawMuteButton();
+}
+
+function drawOptions() {
+  const ts = Math.max(3, Math.min(W / 52, H / 90, 6));
+  const titleY = Math.max(16, H * 0.07);
+  text('OPTIONS', CX, titleY, ts, COL.cyan, 1);
+  text('M TOGGLES SOUND', CX, titleY + 9 * ts + 10, 1.2, COL.gray, 0.55);
+
+  const bw = Math.min(W * 0.72, 300);
+  const bh = Math.max(34, Math.min(50, H * 0.065));
+  const gap = Math.max(14, bh * 0.35);
+  const bx = CX - bw / 2;
+  let by = H * 0.42;
+
+  uiBtns = [];
+
+  uiButton(bx, by, bw, bh, 'SOUND ' + (muted ? 'OFF' : 'ON'), Math.max(1.7, bh / 18), muted ? COL.magenta : COL.green, false);
+  uiBtns.push({ x: bx, y: by, w: bw, h: bh, fn: toggleMute });
+  by += bh + gap;
+
+  uiButton(bx, by, bw, bh, 'BACK', Math.max(1.7, bh / 18), COL.gray, false);
+  uiBtns.push({ x: bx, y: by, w: bw, h: bh, fn: backToMenu });
+
+  drawMuteButton();
+}
+
+function drawLeaderboard() {
+  const ts = Math.max(2.8, Math.min(W / 78, H / 90, 5));
+  const titleY = Math.max(14, H * 0.06);
+  text('LEADERBOARDS', CX, titleY, ts, COL.gold, 1);
+  text('ORBIT RUSH - TOP 10', CX, titleY + 9 * ts + 10, 1.2, COL.gray, 0.55);
+
+  const size = Math.max(1.3, Math.min(W / 240, 2));
+  const rowH = 8 * size + 12;
+  let y = Math.max(80, H * 0.2);
+  const maxRows = Math.min(10, Math.max(0, Math.floor((H - y - 100) / rowH)));
+
+  uiBtns = [];
+
+  if (lbScores === null) {
+    const a = 0.6 + 0.4 * Math.sin(now * 0.008);
+    text('LOADING...', CX, y, 1.6, COL.cyan, a);
+  } else if (lbError || lbScores.length === 0) {
+    text('NO SCORES YET', CX, y, 1.5, COL.gray, 0.85);
+    text('PLAY TO SET A RECORD', CX, y + 22, 1.2, COL.gray, 0.55);
+  } else {
+    const rows = lbScores.slice(0, maxRows);
+    for (let i = 0; i < rows.length; i++) {
+      const e = rows[i];
+      const rank = String(e.rank || i + 1);
+      const line = rank + '. ' + normName(e.player) + '  ' + e.score;
+      const color = i === 0 ? COL.gold : (i < 3 ? COL.white : COL.gray);
+      text(line, CX, y, size, color, i === 0 ? 1 : 0.9);
+      y += rowH;
+    }
+  }
+
+  const bw = Math.min(W * 0.5, 220);
+  const bh = Math.max(30, Math.min(46, H * 0.06));
+  const bx = CX - bw / 2;
+  const by = H - bh - 18;
+
+  text('YOUR BEST ' + best, CX, by - 28, 1.4, COL.gold, 0.9);
+
+  uiButton(bx, by, bw, bh, 'BACK', Math.max(1.6, bh / 18), COL.gray, false);
+  uiBtns.push({ x: bx, y: by, w: bw, h: bh, fn: backToMenu });
+
+  drawMuteButton();
+}
+
+function drawHowTo() {
+  const ts = Math.max(2.8, Math.min(W / 72, H / 92, 5));
+  text('HOW TO PLAY', CX, Math.max(16, H * 0.06), ts, COL.cyan, 1);
+
+  const lines = [
+    'TAP SWITCHES ORBIT',
+    'OR PRESS SPACE OR UP',
+    'DODGE SPIKES AND BLUE ARCS',
+    'COLLECT GEMS FOR COMBOS',
+    'GRAB SHIELDS TO SURVIVE',
+    'WATCH OUT FOR BLINKERS'
+  ];
+  const size = Math.max(1.2, Math.min(W / 330, 1.9));
+  let y = Math.max(84, H * 0.24);
+  for (let i = 0; i < lines.length; i++) {
+    text(lines[i], CX, y, size, COL.gray, 0.9);
+    y += 8 * size + 12;
+  }
+
+  const bw = Math.min(W * 0.5, 220);
+  const bh = Math.max(30, Math.min(46, H * 0.06));
+  const bx = CX - bw / 2;
+  const by = Math.min(H - bh - 22, y + 16);
+
+  uiBtns = [];
+  uiButton(bx, by, bw, bh, 'BACK', Math.max(1.6, bh / 18), COL.gray, false);
+  uiBtns.push({ x: bx, y: by, w: bw, h: bh, fn: backToMenu });
 
   drawMuteButton();
 }
@@ -1160,7 +1456,17 @@ function drawGameOver() {
   text('LEVEL ' + level, CX, y, 1.3, COL.gray, 0.75);
 
   const ra = stateT > 550 ? (0.55 + 0.45 * Math.sin(now * 0.008)) : 0.25;
-  text('TAP TO RETRY', CX, py + ph - 42, Math.min(pw / 62, 2.6), COL.white, ra);
+  text('TAP TO RETRY', CX, py + ph - 70, Math.min(pw / 62, 2.4), COL.white, ra);
+
+  const bw2 = Math.min(pw * 0.46, 190);
+  const bh2 = Math.max(22, Math.min(30, ph * 0.085));
+  const bx2 = CX - bw2 / 2;
+  const by2 = py + ph - bh2 - 12;
+
+  uiBtns = [];
+  uiButton(bx2, by2, bw2, bh2, 'MENU', Math.max(1.3, bh2 / 20), COL.gray, false);
+  uiBtns.push({ x: bx2, y: by2, w: bw2, h: bh2, fn: backToMenu });
+
   drawMuteButton();
 }
 
